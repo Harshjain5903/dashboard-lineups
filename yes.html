@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard Lineup Experiment — CS 526</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#f5f6f8;--surface:#fff;--text:#1a1a2e;--muted:#6b7280;--primary:#2563eb;--phov:#1d4ed8;--accent:#f59e0b;--success:#10b981;--danger:#ef4444;--border:#e2e5ea;--radius:10px}
+body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);line-height:1.6}
+.screen{display:none;min-height:100vh;padding:2rem 1rem;align-items:flex-start;justify-content:center}
+.screen.active{display:flex}
+.container{max-width:700px;width:100%;margin:0 auto}
+.container-wide{max-width:1440px;width:100%;margin:0 auto;padding:0 1rem}
+h1{font-size:1.75rem;font-weight:700;margin-bottom:.75rem}
+h2{font-size:1.25rem;font-weight:600;margin:1.25rem 0 .5rem}
+h3{font-size:1.05rem;font-weight:600;margin:1rem 0 .35rem}
+p{margin-bottom:.75rem}
+.subtitle{color:var(--muted);font-size:1.05rem;margin-bottom:1.5rem}
+.note{color:var(--muted);font-size:.85rem;margin-top:.75rem}
+.info-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1.5rem;margin:1.25rem 0;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.form-group{margin-bottom:1rem}
+.form-group label{display:block;font-weight:500;margin-bottom:.3rem;cursor:pointer}
+.form-group input[type="text"],.form-group input[type="number"],.form-group select{width:100%;padding:.6rem .75rem;border:1px solid var(--border);border-radius:var(--radius);font-size:1rem}
+.form-group input:focus,.form-group select:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(37,99,235,.12)}
+.form-group input[type="checkbox"]{margin-right:.5rem;transform:scale(1.1)}
+.btn-primary{display:inline-block;padding:.7rem 2rem;background:var(--primary);color:#fff;border:none;border-radius:var(--radius);font-size:1rem;font-weight:600;cursor:pointer;transition:background .2s;margin-top:.75rem}
+.btn-primary:hover:not(:disabled){background:var(--phov)}
+.btn-primary:disabled{opacity:.45;cursor:not-allowed}
+.btn-secondary{display:inline-block;padding:.65rem 1.75rem;background:var(--surface);color:var(--text);border:2px solid var(--border);border-radius:var(--radius);font-size:.95rem;font-weight:600;cursor:pointer;transition:all .15s}
+.btn-secondary:hover{border-color:var(--primary);color:var(--primary)}
+.btn-no-diff{display:block;margin:1.5rem auto 0;padding:1rem 3rem;font-size:1.1rem;background:#f8f9fb;border:2px solid #9ca3af;color:#374151;font-weight:700;border-radius:var(--radius)}
+.btn-no-diff:hover{border-color:var(--primary);background:#eef2ff;color:var(--primary)}
+.followup-options{display:flex;flex-direction:column;gap:.75rem;margin-top:1.5rem}
+.btn-followup{padding:1rem 1.25rem;text-align:left;background:var(--surface);border:2px solid var(--border);border-radius:var(--radius);font-size:1rem;cursor:pointer;font-family:inherit;transition:all .15s}
+.btn-followup:hover{border-color:var(--primary);background:#f0f5ff}
+.trial-header{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem;padding:.75rem 0;margin-bottom:.75rem;border-bottom:2px solid var(--border)}
+.trial-label{font-weight:700;font-size:1rem}
+.trial-instruction{color:var(--muted);font-size:.9rem;flex:1;text-align:center}
+.trial-timer{font-weight:600;color:var(--muted);font-variant-numeric:tabular-nums}
+.phase-badge{display:inline-block;padding:2px 10px;border-radius:12px;font-size:.75rem;font-weight:700;color:#fff;margin-left:8px}
+.phase-warmup{background:var(--accent)}
+.phase-main{background:var(--primary)}
+
+/* ===== LINEUP GRID — clean, no overflow ===== */
+.lineup-grid{display:grid;gap:14px;margin:0 auto}
+.lineup-grid.cols-2{grid-template-columns:repeat(2,1fr);max-width:750px}
+.lineup-grid.cols-5{grid-template-columns:repeat(5,1fr)}
+.lineup-grid.cols-4{grid-template-columns:repeat(4,1fr);max-width:1200px}
+
+/* ===== DASHBOARD PANEL — clean borders, no overflow ===== */
+.dashboard-panel{
+  background:var(--surface);border:2px solid var(--border);border-radius:var(--radius);
+  padding:10px;cursor:pointer;transition:all .15s;position:relative;
+  box-shadow:0 1px 4px rgba(0,0,0,.05);overflow:hidden;
+}
+.dashboard-panel:hover{border-color:var(--primary);box-shadow:0 4px 14px rgba(0,0,0,.08);transform:translateY(-1px)}
+.dashboard-panel.selected{border-color:var(--primary);border-width:3px;box-shadow:0 0 0 3px rgba(37,99,235,.2)}
+.panel-label{
+  text-align:center;font-size:.75rem;font-weight:700;color:var(--muted);
+  margin-bottom:6px;letter-spacing:.3px;text-transform:uppercase;
+}
+
+/* ===== INNER 2x2 GRID — fixed aspect ratio, no overflow ===== */
+.dashboard-inner{
+  display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:6px;
+}
+
+/* ===== MINI CHART — contained, no overflow ===== */
+.mini-chart{
+  width:100%;position:relative;overflow:hidden;
+  background:#f8f9fb;border-radius:5px;border:1px solid #eceef1;
+  aspect-ratio:1.5;
+}
+.mini-chart svg{display:block;width:100%;height:100%}
+.var-label{
+  position:absolute;top:2px;left:4px;font-size:9px;font-weight:700;
+  color:#888;pointer-events:none;z-index:1;
+}
+.chart-type-label{display:none}
+
+.explainer{background:#fffbeb;border:1px solid #fcd34d;border-radius:var(--radius);padding:1rem;margin:1rem 0;font-size:.9rem}
+.explainer strong{color:#92400e}
+.status-msg{margin-top:1rem;padding:.75rem;border-radius:var(--radius);font-size:.9rem}
+.status-success{background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0}
+.status-error{background:#fef2f2;color:#991b1b;border:1px solid #fecaca}
+.status-sending{background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe}
+
+.feedback-wrap{text-align:left;margin-top:1rem}
+.feedback-reason{background:#f8fafc;border:1px solid var(--border);border-radius:var(--radius);padding:.75rem;margin:.75rem 0;font-size:.92rem;color:#374151}
+.feedback-lineup{margin-top:.75rem}
+.feedback-lineup .dashboard-panel{cursor:default;transform:none}
+.feedback-lineup .dashboard-panel:hover{border-color:var(--border);box-shadow:0 1px 4px rgba(0,0,0,.05);transform:none}
+.feedback-lineup .dashboard-panel.correct-answer{border-color:var(--success);border-width:3px;box-shadow:0 0 0 3px rgba(16,185,129,.15)}
+.feedback-lineup .dashboard-panel.user-choice{outline:3px dashed #f59e0b;outline-offset:2px}
+
+#screen-break .container,#screen-end .container{text-align:center;padding-top:10vh}
+
+@media(max-width:1200px){.lineup-grid.cols-5{grid-template-columns:repeat(4,1fr)}}
+@media(max-width:900px){.lineup-grid.cols-5{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:600px){.lineup-grid.cols-4{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+
+<!-- WELCOME -->
+<div id="screen-welcome" class="screen active">
+<div class="container">
+<h1>Dashboard Pattern Detection Study</h1>
+<p class="subtitle">CS 526 — Computer Graphics II</p>
+<div class="info-box">
+<h2>About This Study</h2>
+<p>You will see dashboard panels, each containing a 2×2 grid of 4 charts (V1, V2, V3, V4). Your task is to find the panel where the charts are related to each other.</p>
+<h3>Time</h3>
+<p>About 10 minutes. Starts with warmup rounds (with feedback), then scored rounds.</p>
+<h3>Eligibility</h3>
+<p>Normal or corrected-to-normal vision. Desktop or laptop with screen ≥13 inches.</p>
+<h3>Consent</h3>
+<p>Participation is voluntary and anonymous. You may stop at any time.</p>
+</div>
+<div class="form-group"><label><input type="checkbox" id="consent-check"> I have read the above and agree to participate.</label></div>
+<button id="btn-start" class="btn-primary" disabled>Continue</button>
+</div></div>
+
+<!-- DEMOGRAPHICS -->
+<div id="screen-demographics" class="screen">
+<div class="container">
+<h1>Background Information</h1>
+<div class="form-group"><label>Participant ID (auto-assigned):</label><input type="text" id="participant-id" readonly style="background:#f0f0f0;font-weight:700"></div>
+<div class="form-group"><label for="age">Age:</label><input type="number" id="age" min="18" max="99" placeholder="e.g. 25"></div>
+<div class="form-group"><label for="gender">Gender:</label><select id="gender"><option value="">Select…</option><option value="male">Male</option><option value="female">Female</option><option value="non-binary">Non-binary</option><option value="prefer-not">Prefer not to say</option></select></div>
+<div class="form-group"><label for="viz-exp">How often do you work with data visualizations?</label><select id="viz-exp"><option value="">Select…</option><option value="never">Never</option><option value="rarely">Rarely</option><option value="sometimes">Sometimes (monthly)</option><option value="often">Often (weekly)</option><option value="daily">Daily</option></select></div>
+<div class="form-group"><label for="vision">Vision:</label><select id="vision"><option value="">Select…</option><option value="normal">Normal</option><option value="corrected">Corrected (glasses/contacts)</option><option value="color-deficient">Color vision deficiency</option></select></div>
+<button id="btn-demo" class="btn-primary" disabled>Continue to Instructions</button>
+</div></div>
+
+<!-- INSTRUCTIONS -->
+<div id="screen-instructions" class="screen">
+<div class="container">
+<h1>Instructions</h1>
+<div class="info-box">
+<p>Each trial shows several <strong>dashboard panels</strong>. Every panel has a <strong>2×2 grid of 4 charts</strong> (V1, V2, V3, V4).</p>
+<div class="explainer">
+<p><strong>What to look for:</strong></p>
+<p>In the TARGET panel, the charts are related — two of the variables move together, and the other two move in opposite directions. There is a visible pattern ACROSS the charts.</p>
+<p>In all other panels, the charts have NO relationship. They are independent.</p>
+<p><strong>Your job:</strong> Find the panel where the charts seem connected. Click it.</p>
+<p>If no panel stands out, click <strong>"All dashboards look the same."</strong></p>
+</div>
+<h3>Warmup First</h3>
+<p>You'll start with <strong>2 panels</strong>, then <strong>4 panels</strong> — both with feedback telling you if you're right or wrong. Then the real trials begin (4 panels and 10 panels, no feedback).</p>
+<button id="btn-go" class="btn-primary">Start Warmup (2 panels)</button>
+</div></div>
+
+<!-- TRIAL -->
+<div id="screen-trial" class="screen">
+<div class="container-wide">
+<div class="trial-header">
+<span class="trial-label" id="trial-counter">Trial 1</span>
+<span class="trial-instruction">Click the different panel, or "All dashboards look the same"</span>
+<span class="trial-timer" id="trial-timer">0.0s</span>
+</div>
+<div id="trial-lineup" class="lineup-grid"></div>
+<button id="btn-all-same" class="btn-secondary btn-no-diff">All dashboards look the same</button>
+</div></div>
+
+<!-- FEEDBACK -->
+<div id="screen-feedback" class="screen">
+<div class="container">
+<h1 id="fb-title"></h1>
+<p id="fb-text"></p>
+<div class="feedback-wrap">
+<div id="fb-reason" class="feedback-reason"></div>
+<div id="fb-lineup" class="lineup-grid feedback-lineup"></div>
+</div>
+<button id="btn-fb" class="btn-primary">Continue</button>
+</div></div>
+
+<!-- PHASE TRANSITION -->
+<div id="screen-phase" class="screen">
+<div class="container" style="text-align:center;padding-top:10vh">
+<h1 id="ph-title"></h1>
+<p id="ph-text"></p>
+<button id="btn-ph" class="btn-primary">Continue</button>
+</div></div>
+
+<!-- BREAK -->
+<div id="screen-break" class="screen">
+<div class="container">
+<h1>Take a Short Break</h1>
+<p>You're halfway through. Rest your eyes for a moment.</p>
+<p id="break-progress"></p>
+<button id="btn-resume" class="btn-primary">Resume</button>
+</div></div>
+
+<!-- END -->
+<div id="screen-end" class="screen">
+<div class="container">
+<h1>Thank You!</h1>
+<p>You have completed the experiment.</p>
+<div class="info-box"><h3>Summary</h3><p id="summary-stats"></p></div>
+<div id="upload-status"></div>
+<button id="btn-dl" class="btn-primary" style="margin-top:1rem">Download Backup CSV</button>
+<p class="note">Data has been automatically sent. The CSV is a backup.</p>
+</div></div>
+
+<script>
+// =====================================================================
+// GOOGLE SHEETS ENDPOINT
+// =====================================================================
+const SHEET_URL="https://script.google.com/macros/s/AKfycbyYD9MjFrViNsT2hJI_O632lWKLwAGK4GXea4Bg-gdepoP6Zl3ni7iOdZivQK7Y2Wk/exec";
+
+// =====================================================================
+// DATA GENERATOR — Multivariate Normal via Cholesky
+// =====================================================================
+const DG=(()=>{
+  function randn(){let u=0,v=0;while(!u)u=Math.random();while(!v)v=Math.random();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)}
+  function chol(m){const n=m.length,L=Array.from({length:n},()=>new Array(n).fill(0));for(let i=0;i<n;i++)for(let j=0;j<=i;j++){let s=0;for(let k=0;k<j;k++)s+=L[i][k]*L[j][k];L[i][j]=i===j?Math.sqrt(Math.max(m[i][i]-s,1e-10)):(m[i][j]-s)/L[j][j]}return L}
+  function mvn(mu,cov,n){const d=mu.length,L=chol(cov),o=[];for(let s=0;s<n;s++){const z=Array.from({length:d},()=>randn()),x=mu.slice();for(let i=0;i<d;i++)for(let j=0;j<=i;j++)x[i]+=L[i][j]*z[j];o.push(x)}return o}
+  // Covariance structures: vary which pairs are correlated (per Prof. Reda feedback)
+  // Pattern 0: V1↔V2 positive, V3↔V4 negative
+  // Pattern 1: V1↔V3 positive, V2↔V4 negative
+  // Pattern 2: V1↔V4 positive, V2↔V3 negative
+  function tCov(r,pattern){
+    const m=[[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]];
+    if(pattern===0){m[0][1]=m[1][0]=r;m[2][3]=m[3][2]=-r}
+    else if(pattern===1){m[0][2]=m[2][0]=r;m[1][3]=m[3][1]=-r}
+    else{m[0][3]=m[3][0]=r;m[1][2]=m[2][1]=-r}
+    return m;
+  }
+  // Half-correlation: only ONE pair correlated (positive), the other pair independent
+  // Used for medium-signal distractors per Reda: "one correlation in the decoys but not the other"
+  function halfCov(r,pattern){
+    const m=[[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]];
+    // Only set the positive pair, leave the negative pair at zero
+    if(pattern===0){m[0][1]=m[1][0]=r}
+    else if(pattern===1){m[0][2]=m[2][0]=r}
+    else{m[0][3]=m[3][0]=r}
+    return m;
+  }
+  function randPattern(){return Math.floor(Math.random()*3)}
+  // Pick a DIFFERENT pattern from the target's pattern
+  function diffPattern(targetPat){
+    const opts=[0,1,2].filter(p=>p!==targetPat);
+    return opts[Math.floor(Math.random()*opts.length)];
+  }
+  const nC=[[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]];
+  const SIG={weak:.50,medium:.70,strong:.90};
+  const MU=[5,5,5,5];
+  function nP(){return 12+Math.floor(Math.random()*7)}
+  function dd(c,n){const s=mvn(MU,c,n);return{v1:s.map(r=>r[0]),v2:s.map(r=>r[1]),v3:s.map(r=>r[2]),v4:s.map(r=>r[3])}}
+  function lineup(o){
+    const{numPanels:np=20,signalStrength:ss='medium',isNull:nl=false}=o;
+    const n=nP(),p=[];
+    if(nl){
+      // Null trials: all panels from same process (identity matrix)
+      for(let i=0;i<np;i++)p.push(dd(nC,n));
+      return{panels:p,targetIndex:-1,nPoints:n,covPattern:-1,distractorType:'none'}
+    }
+    const r=SIG[ss]||SIG.medium,ti=Math.floor(Math.random()*np);
+    const pat=randPattern();
+    // Per Prof. Reda: distractor complexity varies with signal strength
+    // Strong: distractors = independent (identity matrix) — easy, big contrast
+    // Medium: distractors = ONE correlation (same pair as target, positive only, no negative pair)
+    //         so target has +r and -r, distractors have only +r on same pair
+    // Weak: distractors = TWO correlations but DIFFERENT pairs from target
+    //        both look structured, but the structure differs
+    let dType='identity';
+    for(let i=0;i<np;i++){
+      if(i===ti){p.push(dd(tCov(r,pat),n));continue}
+      if(ss==='strong'){
+        p.push(dd(nC,n));
+        dType='identity';
+      }else if(ss==='medium'){
+        // Distractors get half the target's structure: same positive pair, no negative pair
+        p.push(dd(halfCov(r*0.6,pat),n));
+        dType='half';
+      }else{
+        // Weak: distractors get full correlations but on DIFFERENT variable pairs
+        const dp=diffPattern(pat);
+        p.push(dd(tCov(r*0.7,dp),n));
+        dType='different';
+      }
+    }
+    return{panels:p,targetIndex:ti,nPoints:n,covPattern:pat,distractorType:dType}
+  }
+  return{lineup,SIG}
+})();
+
+// =====================================================================
+// CHART RENDERER — clean, contained, no overflow
+// =====================================================================
+const CCOLORS={bar:'#4a7cde',line:'#4a7cde',dot:'#4a7cde',scatter:'#4a7cde'};
+
+function renderMini(el,data,type,varLabel){
+  const w=160,h=110,pad=12;
+  const iw=w-2*pad,ih=h-2*pad;
+  d3.select(el).select('svg').remove();
+  const c=CCOLORS[type]||CCOLORS.bar;
+  const svg=d3.select(el).append('svg')
+    .attr('viewBox',`0 0 ${w} ${h}`)
+    .attr('preserveAspectRatio','xMidYMid meet')
+    .style('overflow','hidden');
+  const g=svg.append('g').attr('transform',`translate(${pad},${pad})`);
+  // Per-chart scale: use data min/max with 10% padding so chart fills the space
+  // Professor Reda: "the minimum should be the minimum of the display, the maximum should be the maximum of the display"
+  const dMin=d3.min(data),dMax=d3.max(data);
+  const dPad=(dMax-dMin)*0.1||0.5;
+  const yScale=d3.scaleLinear().domain([dMin-dPad,dMax+dPad]).range([ih,0]);
+
+  // baseline
+  g.append('line').attr('x1',0).attr('y1',ih).attr('x2',iw).attr('y2',ih).attr('stroke','#dde0e4').attr('stroke-width',.7);
+
+  if(type==='bar'){
+    const x=d3.scaleBand().domain(d3.range(data.length)).range([0,iw]).padding(.18);
+    // For bars, anchor at the data minimum (bottom of scale) so bars fill the space
+    const yBottom=yScale.domain()[0];
+    g.selectAll('rect').data(data).enter().append('rect')
+      .attr('x',(d,i)=>x(i)).attr('y',d=>yScale(d))
+      .attr('width',x.bandwidth())
+      .attr('height',d=>yScale(yBottom)-yScale(d))
+      .attr('fill',c).attr('rx',2).attr('opacity',.88);
+  }else if(type==='line'){
+    const x=d3.scaleLinear().domain([0,data.length-1]).range([4,iw-4]);
+    g.append('path').datum(data)
+      .attr('d',d3.line().x((d,i)=>x(i)).y(d=>yScale(d)).curve(d3.curveMonotoneX))
+      .attr('fill','none').attr('stroke',c).attr('stroke-width',2.2).attr('opacity',.9);
+    g.selectAll('circle').data(data).enter().append('circle')
+      .attr('cx',(d,i)=>x(i)).attr('cy',d=>yScale(d))
+      .attr('r',2.5).attr('fill',c);
+  }else if(type==='dot'){
+    const x=d3.scaleLinear().domain([0,data.length-1]).range([6,iw-6]);
+    g.selectAll('circle').data(data).enter().append('circle')
+      .attr('cx',(d,i)=>x(i)).attr('cy',d=>yScale(d))
+      .attr('r',Math.max(3,Math.min(4.5,iw/data.length/2.5)))
+      .attr('fill',c).attr('opacity',.82);
+  }else if(type==='scatter'){
+    const x=d3.scaleLinear().domain([0,data.length-1]).range([6,iw-6]);
+    g.selectAll('circle').data(data).enter().append('circle')
+      .attr('cx',(d,i)=>x(i)+(Math.random()-.5)*5)
+      .attr('cy',d=>yScale(d))
+      .attr('r',3).attr('fill',c).attr('opacity',.72);
+  }
+
+  // var label inside SVG so it's always contained
+  svg.append('text').attr('x',4).attr('y',11).attr('font-size','10px').attr('font-weight','700').attr('fill','#999').text(varLabel);
+}
+
+function renderDash(el,data,chartType){
+  el.innerHTML='';
+  const vars=['v1','v2','v3','v4'],labels=['V1','V2','V3','V4'];
+  const mixed=Array.isArray(chartType);
+  vars.forEach((v,i)=>{
+    const wrap=document.createElement('div');
+    wrap.className='mini-chart';
+    el.appendChild(wrap);
+    const t=mixed?chartType[i]:chartType;
+    requestAnimationFrame(()=>renderMini(wrap,data[v],t,labels[i]));
+    if(mixed){
+      const lbl=document.createElement('div');
+      lbl.className='chart-type-label';
+      lbl.textContent=t;
+      wrap.appendChild(lbl);
+    }
+  });
+}
+
+function renderLineup(gridEl,panels,chartType,np,onSelect){
+  gridEl.innerHTML='';
+  gridEl.className='lineup-grid';
+  if(np<=4)gridEl.classList.add('cols-2');
+  else if(np<=10)gridEl.classList.add('cols-5');
+  else gridEl.classList.add('cols-5');
+  panels.forEach((data,i)=>{
+    const p=document.createElement('div');
+    p.className='dashboard-panel';
+    const lbl=document.createElement('div');
+    lbl.className='panel-label';
+    lbl.textContent=`Panel ${i+1}`;
+    p.appendChild(lbl);
+    const inner=document.createElement('div');
+    inner.className='dashboard-inner';
+    p.appendChild(inner);
+    p.addEventListener('click',()=>{
+      gridEl.querySelectorAll('.dashboard-panel').forEach(x=>x.classList.remove('selected'));
+      p.classList.add('selected');
+      if(onSelect)onSelect(i);
+    });
+    gridEl.appendChild(p);
+    requestAnimationFrame(()=>renderDash(inner,data,chartType));
+  });
+}
+
+// =====================================================================
+// PARTICIPANT ID
+// =====================================================================
+function gPID(){let p=localStorage.getItem('dl_pid3');if(p)return p;p='P'+Date.now().toString(36)+Math.random().toString(36).substr(2,4);localStorage.setItem('dl_pid3',p);return p}
+
+// =====================================================================
+// GOOGLE SHEETS — with retry
+// =====================================================================
+async function sendS(rows){
+  if(!SHEET_URL||SHEET_URL.includes("PASTE"))return{ok:false,r:"not_configured"};
+  // Try up to 3 times
+  for(let attempt=0;attempt<3;attempt++){
+    try{
+      await fetch(SHEET_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"application/json"},body:JSON.stringify({data:rows})});
+      return{ok:true}
+    }catch(e){
+      if(attempt===2)return{ok:false,r:e.message}
+      await new Promise(r=>setTimeout(r,1000)); // wait 1s before retry
+    }
+  }
+  return{ok:false,r:"failed after retries"}
+}
+
+// =====================================================================
+// EXPERIMENT — Streamlined: ~10 min, no follow-up question
+// =====================================================================
+// Warmup: 2 panels, 1 trial, feedback
+// Warmup: 4 panels, 1 trial, feedback
+// Scored: 4 panels, 20 trials (10 target + 10 null = 50-50)
+// Break
+// Scored: 10 panels, 20 trials (10 target + 10 null = 50-50)
+// Total: 42 trials, 40 scored. ~10 minutes.
+// =====================================================================
+
+(function(){
+const CTS=['bar','line','dot'];
+const SIGS=['weak','medium','strong'];
+const LAT=[['bar','line','dot'],['line','dot','bar'],['dot','bar','line']];
+const MIXED=['bar','line','dot','scatter'];
+
+let pD={},trials=[],idx=0,tS=0,tmr=null,res=[],brk=false,lastPh='';
+
+function show(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));document.getElementById(id).classList.add('active');window.scrollTo(0,0)}
+function shuf(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+
+function build(order){
+  const t=[];
+  // WARMUP: 2 panels, 1 trial
+  t.push({np:2,ct:order[0],ss:'strong',nl:false,mx:false,ph:'w2',fb:true});
+  // WARMUP: 4 panels, 1 trial
+  t.push({np:4,ct:order[1],ss:'strong',nl:false,mx:false,ph:'w4',fb:true});
+
+  // SCORED: 4 panels, 20 trials (10 target + 10 null = 50-50)
+  const s4=[];
+  order.forEach(c=>SIGS.forEach(s=>{
+    s4.push({np:4,ct:c,ss:s,nl:false,mx:false,ph:'s4',fb:false});
+  }));
+  s4.push({np:4,ct:MIXED,ss:'strong',nl:false,mx:true,ph:'s4',fb:false});
+  for(let i=0;i<10;i++){
+    s4.push({np:4,ct:i<3?order[i%3]:(i<6?order[i%3]:(i<9?MIXED:order[0])),ss:null,nl:true,mx:i>=6&&i<9,ph:'s4',fb:false});
+  }
+  t.push(...shuf(s4));
+
+  // SCORED: 10 panels, 20 trials (10 target + 10 null = 50-50)
+  const s10=[];
+  order.forEach(c=>SIGS.forEach(s=>{
+    s10.push({np:10,ct:c,ss:s,nl:false,mx:false,ph:'s10',fb:false});
+  }));
+  s10.push({np:10,ct:MIXED,ss:'strong',nl:false,mx:true,ph:'s10',fb:false});
+  for(let i=0;i<10;i++){
+    s10.push({np:10,ct:i<3?order[i%3]:(i<6?order[i%3]:(i<9?MIXED:order[0])),ss:null,nl:true,mx:i>=6&&i<9,ph:'s10',fb:false});
+  }
+  t.push(...shuf(s10));
+  return t;
+}
+
+document.addEventListener('DOMContentLoaded',()=>{
+  document.getElementById('participant-id').value=gPID();
+
+  const con=document.getElementById('consent-check'),bs=document.getElementById('btn-start');
+  con.addEventListener('change',()=>{bs.disabled=!con.checked});
+  bs.addEventListener('click',()=>show('screen-demographics'));
+
+  const bd=document.getElementById('btn-demo'),fs=['age','gender','viz-exp','vision'];
+  function ck(){bd.disabled=!fs.every(f=>document.getElementById(f).value.trim()!=='')}
+  fs.forEach(f=>{document.getElementById(f).addEventListener('input',ck);document.getElementById(f).addEventListener('change',ck)});
+  bd.addEventListener('click',()=>{
+    pD={pid:document.getElementById('participant-id').value,age:document.getElementById('age').value,gender:document.getElementById('gender').value,viz:document.getElementById('viz-exp').value,vision:document.getElementById('vision').value,ts:new Date().toISOString(),sw:window.innerWidth,sh:window.innerHeight};
+    const n=parseInt(pD.pid.replace(/\D/g,'')||'1');
+    const co=LAT[n%LAT.length];
+    pD.co=co.join(',');
+    trials=build(co);
+    pD.tt=trials.length;
+    show('screen-instructions');
+  });
+
+  document.getElementById('btn-go').addEventListener('click',()=>{idx=0;brk=false;lastPh='';run()});
+  document.getElementById('btn-all-same').addEventListener('click',()=>{const cb=document.getElementById('btn-confirm-sel');if(cb)cb.style.display='none';done(-1)});
+  document.getElementById('btn-fb').addEventListener('click',()=>{idx++;run()});
+  document.getElementById('btn-ph').addEventListener('click',()=>run());
+  document.getElementById('btn-resume').addEventListener('click',()=>{brk=true;run()});
+  document.getElementById('btn-dl').addEventListener('click',dlCSV);
+});
+
+function run(){
+  if(idx>=trials.length){end();return}
+  const t=trials[idx];
+
+  if(t.ph!==lastPh){
+    lastPh=t.ph;
+    if(t.ph==='w4'){phScr('Warmup: 4 panels','Same task, one more panel. Still with feedback.');return}
+    if(t.ph==='s4'){phScr('Scored: 4 panels','No more feedback. Your responses are now recorded.');return}
+    if(t.ph==='s10'){phScr('Scored: 10 panels','More panels now. A break will come halfway through.');return}
+  }
+
+  // Break halfway through 10-panel phase
+  const s10trials=trials.filter(x=>x.ph==='s10');
+  const s10done=trials.slice(0,idx).filter(x=>x.ph==='s10').length;
+  if(t.ph==='s10'&&!brk&&s10done>=Math.floor(s10trials.length/2)){
+    document.getElementById('break-progress').textContent=`Completed ${s10done} of ${s10trials.length} trials in this phase.`;
+    show('screen-break');return;
+  }
+
+  show('screen-trial');
+  // Hide confirm button from previous trial
+  const prevCb=document.getElementById('btn-confirm-sel');if(prevCb)prevCb.style.display='none';
+  const totalScored=trials.filter(x=>!x.fb).length;
+  const scoredSoFar=trials.slice(0,idx).filter(x=>!x.fb).length;
+  document.getElementById('trial-counter').innerHTML=
+    `Trial ${idx+1}/${trials.length}`+
+    (t.fb?' <span class="phase-badge phase-warmup">Warmup</span>':
+    ' <span class="phase-badge phase-main">Scored '+(scoredSoFar+1)+'/'+totalScored+'</span>');
+
+  const lu=DG.lineup({numPanels:t.np,signalStrength:t.ss||'medium',isNull:t.nl});
+  t._ti=lu.targetIndex;t._np=lu.nPoints;t._panels=lu.panels;t._covPat=lu.covPattern;t._dType=lu.distractorType;
+
+  renderLineup(document.getElementById('trial-lineup'),lu.panels,t.ct,t.np,i=>{
+    // Show confirm button instead of immediate submit
+    let cb=document.getElementById('btn-confirm-sel');
+    if(!cb){
+      cb=document.createElement('button');
+      cb.id='btn-confirm-sel';
+      cb.className='btn-primary';
+      cb.style.cssText='display:block;margin:0.75rem auto 0;padding:.7rem 2.5rem;font-size:1.05rem';
+      document.getElementById('btn-all-same').parentNode.insertBefore(cb,document.getElementById('btn-all-same'));
+    }
+    cb.textContent=`Confirm Panel ${i+1}`;
+    cb.style.display='block';
+    cb.onclick=()=>{cb.style.display='none';done(i)};
+  });
+
+  tS=performance.now();
+  if(tmr)clearInterval(tmr);
+  tmr=setInterval(()=>{document.getElementById('trial-timer').textContent=((performance.now()-tS)/1000).toFixed(1)+'s'},100);
+}
+
+function phScr(ti,tx){document.getElementById('ph-title').textContent=ti;document.getElementById('ph-text').textContent=tx;show('screen-phase')}
+
+function warmupReason(t){
+  if(t.nl){
+    return 'Reason: this is a null trial. All dashboards were generated from the same process, so no panel has a unique cross-chart relationship.';
+  }
+  const patNames=[
+    'V1 and V2 tend to move together (positive covariance), while V3 and V4 tend to move in opposite directions (negative covariance).',
+    'V1 and V3 tend to move together (positive covariance), while V2 and V4 tend to move in opposite directions (negative covariance).',
+    'V1 and V4 tend to move together (positive covariance), while V2 and V3 tend to move in opposite directions (negative covariance).'
+  ];
+  let explanation='Reason: in the target panel, '+patNames[t._covPat||0];
+  if(t._dType==='identity') explanation+=' Distractor panels have independent variables with no correlations.';
+  else if(t._dType==='half') explanation+=' Distractor panels share one correlation with the target but are missing the second relationship.';
+  else if(t._dType==='different') explanation+=' Distractor panels also have correlations, but between different variable pairs than the target.';
+  return explanation;
+}
+
+function renderWarmupFeedback(t,sel){
+  const fbLineup=document.getElementById('fb-lineup');
+  const fbReason=document.getElementById('fb-reason');
+
+  fbReason.textContent=warmupReason(t);
+  renderLineup(fbLineup,t._panels,t.ct,t.np,null);
+
+  const cards=[...fbLineup.querySelectorAll('.dashboard-panel')];
+  cards.forEach(c=>{c.style.pointerEvents='none'});
+  if(!t.nl&&cards[t._ti])cards[t._ti].classList.add('correct-answer');
+  if(sel>=0&&cards[sel])cards[sel].classList.add('user-choice');
+}
+
+function done(sel){
+  const rt=performance.now()-tS;if(tmr)clearInterval(tmr);
+  const t=trials[idx];
+  const correct=t.nl?(sel===-1):(sel===t._ti);
+
+  if(t.fb){
+    const ti=document.getElementById('fb-title'),tx=document.getElementById('fb-text');
+    if(correct){ti.textContent='Correct!';ti.style.color='var(--success)';
+      tx.textContent=t.nl?'All panels were the same — you correctly identified that!':`You found Panel ${t._ti+1}. The charts in that panel were correlated.`}
+    else{ti.textContent='Not quite';ti.style.color='var(--accent)';
+      tx.textContent=t.nl?'This was a null trial — all panels were identical. The correct answer was "All dashboards look the same."':`The target was Panel ${t._ti+1}. Look for the panel where two charts move together and the other two move in opposite directions.`}
+    renderWarmupFeedback(t,sel);
+    show('screen-feedback');return;
+  }
+
+  const record={
+    trialNumber:idx+1,phase:t.ph,numPanels:t.np,
+    chartType:Array.isArray(t.ct)?'mixed':t.ct,
+    signalStrength:t.ss||'null',
+    isNull:t.nl,isMixed:t.mx||false,
+    covPattern:t._covPat,
+    distractorType:t._dType||'none',
+    targetPanel:t._ti+1,selectedPanel:sel+1,
+    correct:correct,
+    responseTimeMs:Math.round(rt),
+    nPoints:t._np
+  };
+  res.push(record);
+  idx++;
+  run();
+}
+
+async function end(){
+  show('screen-end');
+  const scored=res;
+  const c=scored.filter(r=>r.correct).length;
+  const a=scored.length?(c/scored.length*100).toFixed(1):'0';
+  const ar=scored.length?(scored.reduce((s,r)=>s+r.responseTimeMs,0)/scored.length/1000).toFixed(1):'0';
+  const nulls=scored.filter(r=>r.isNull===true);
+  const fp=nulls.filter(r=>!r.correct).length;
+  document.getElementById('summary-stats').innerHTML=
+    `Scored trials: <strong>${scored.length}</strong><br>`+
+    `Accuracy: <strong>${a}%</strong> (${c}/${scored.length})<br>`+
+    `Avg response time: <strong>${ar}s</strong><br>`+
+    `False positives (null trials): <strong>${fp}/${nulls.length}</strong>`;
+
+  const st=document.getElementById('upload-status');
+  st.innerHTML='<div class="status-msg status-sending">Sending data…</div>';
+  const rows=scored.map(r=>({participantId:pD.pid,age:pD.age,gender:pD.gender,vizExperience:pD.viz,vision:pD.vision,chartOrder:pD.co,screenWidth:pD.sw,screenHeight:pD.sh,sessionTimestamp:pD.ts,...r}));
+  const rr=await sendS(rows);
+  if(rr.ok)st.innerHTML='<div class="status-msg status-success">Data sent successfully!</div>';
+  else st.innerHTML='<div class="status-msg status-error">Upload issue. Please download the CSV.</div>';
+}
+
+function dlCSV(){
+  const h=['participantId','age','gender','vizExperience','vision','chartOrder','screenWidth','screenHeight','sessionTimestamp','trialNumber','phase','numPanels','chartType','signalStrength','isNull','isMixed','covPattern','distractorType','targetPanel','selectedPanel','correct','responseTimeMs','nPoints'];
+  const rows=res.map(r=>h.map(k=>{const v=['participantId','age','gender','vizExperience','vision','chartOrder','screenWidth','screenHeight','sessionTimestamp'].includes(k)?pD[k==='vizExperience'?'viz':k==='chartOrder'?'co':k==='screenWidth'?'sw':k==='screenHeight'?'sh':k==='sessionTimestamp'?'ts':k]:r[k];return`"${String(v==null?'':v).replace(/"/g,'""')}"`}).join(','));
+  const csv=h.join(',')+'\n'+rows.join('\n');
+  const b=new Blob([csv],{type:'text/csv'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(b);
+  a.download=`dashboard_lineup_${pD.pid}_${Date.now()}.csv`;a.click();
+}
+})();
+</script>
+</body>
+</html>
