@@ -32,9 +32,6 @@ p{margin-bottom:.75rem}
 .btn-secondary:hover{border-color:var(--primary);color:var(--primary)}
 .btn-no-diff{display:block;margin:1.5rem auto 0;padding:1rem 3rem;font-size:1.1rem;background:#f8f9fb;border:2px solid #9ca3af;color:#374151;font-weight:700;border-radius:var(--radius)}
 .btn-no-diff:hover{border-color:var(--primary);background:#eef2ff;color:var(--primary)}
-.followup-options{display:flex;flex-direction:column;gap:.75rem;margin-top:1.5rem}
-.btn-followup{padding:1rem 1.25rem;text-align:left;background:var(--surface);border:2px solid var(--border);border-radius:var(--radius);font-size:1rem;cursor:pointer;font-family:inherit;transition:all .15s}
-.btn-followup:hover{border-color:var(--primary);background:#f0f5ff}
 .trial-header{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem;padding:.75rem 0;margin-bottom:.75rem;border-bottom:2px solid var(--border)}
 .trial-label{font-weight:700;font-size:1rem}
 .trial-instruction{color:var(--muted);font-size:.9rem;flex:1;text-align:center}
@@ -113,7 +110,7 @@ p{margin-bottom:.75rem}
 <h2>About This Study</h2>
 <p>You will see dashboard panels, each containing a 2×2 grid of 4 charts (V1, V2, V3, V4). Your task is to find the panel where the charts are related to each other.</p>
 <h3>Time</h3>
-<p>About 10 minutes. Starts with warmup rounds (with feedback), then scored rounds.</p>
+<p>About 10 minutes. Starts with two short warmup rounds with feedback, then scored rounds.</p>
 <h3>Eligibility</h3>
 <p>Normal or corrected-to-normal vision. Desktop or laptop with screen ≥13 inches.</p>
 <h3>Consent</h3>
@@ -149,7 +146,8 @@ p{margin-bottom:.75rem}
 <p>If no panel stands out, click <strong>"All dashboards look the same."</strong></p>
 </div>
 <h3>Warmup First</h3>
-<p>You'll start with <strong>2 panels</strong>, then <strong>4 panels</strong> — both with feedback telling you if you're right or wrong. Then the real trials begin (4 panels and 10 panels, no feedback).</p>
+<p>You'll start with <strong>2 panels</strong>, then <strong>4 panels</strong> — both with feedback telling you if you're right or wrong. Then the real trials begin: <strong>20 scored trials with 4 panels</strong> and <strong>20 scored trials with 10 panels</strong>.</p>
+</div>
 <button id="btn-go" class="btn-primary">Start Warmup (2 panels)</button>
 </div></div>
 
@@ -189,7 +187,7 @@ p{margin-bottom:.75rem}
 <div id="screen-break" class="screen">
 <div class="container">
 <h1>Take a Short Break</h1>
-<p>You're halfway through. Rest your eyes for a moment.</p>
+<p>You're halfway through the 10-panel block. Rest your eyes for a moment.</p>
 <p id="break-progress"></p>
 <button id="btn-resume" class="btn-primary">Resume</button>
 </div></div>
@@ -218,7 +216,7 @@ const DG=(()=>{
   function randn(){let u=0,v=0;while(!u)u=Math.random();while(!v)v=Math.random();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)}
   function chol(m){const n=m.length,L=Array.from({length:n},()=>new Array(n).fill(0));for(let i=0;i<n;i++)for(let j=0;j<=i;j++){let s=0;for(let k=0;k<j;k++)s+=L[i][k]*L[j][k];L[i][j]=i===j?Math.sqrt(Math.max(m[i][i]-s,1e-10)):(m[i][j]-s)/L[j][j]}return L}
   function mvn(mu,cov,n){const d=mu.length,L=chol(cov),o=[];for(let s=0;s<n;s++){const z=Array.from({length:d},()=>randn()),x=mu.slice();for(let i=0;i<d;i++)for(let j=0;j<=i;j++)x[i]+=L[i][j]*z[j];o.push(x)}return o}
-  // Covariance structures: vary which pairs are correlated (per Prof. Reda feedback)
+  // Covariance structures: vary which pairs are correlated.
   // Pattern 0: V1↔V2 positive, V3↔V4 negative
   // Pattern 1: V1↔V3 positive, V2↔V4 negative
   // Pattern 2: V1↔V4 positive, V2↔V3 negative
@@ -229,43 +227,27 @@ const DG=(()=>{
     else{m[0][3]=m[3][0]=r;m[1][2]=m[2][1]=-r}
     return m;
   }
-  // Half-correlation: only ONE pair correlated (positive), the other pair independent
-  // Used for medium-signal distractors per Reda: "one correlation in the decoys but not the other"
+  // Half-correlation: only one positive pair correlated, second relation absent.
   function halfCov(r,pattern){
     const m=[[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]];
-    // Only set the positive pair, leave the negative pair at zero
     if(pattern===0){m[0][1]=m[1][0]=r}
     else if(pattern===1){m[0][2]=m[2][0]=r}
     else{m[0][3]=m[3][0]=r}
     return m;
   }
   function randPattern(){return Math.floor(Math.random()*3)}
-  // Pick a DIFFERENT pattern from the target's pattern
-  function diffPattern(targetPat){
-    const opts=[0,1,2].filter(p=>p!==targetPat);
-    return opts[Math.floor(Math.random()*opts.length)];
-  }
+  function diffPattern(targetPat){const opts=[0,1,2].filter(p=>p!==targetPat);return opts[Math.floor(Math.random()*opts.length)]}
   const nC=[[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]];
   const SIG={weak:.50,medium:.70,strong:.90};
   const MU=[5,5,5,5];
   function nP(){return 12+Math.floor(Math.random()*7)}
   function dd(c,n){const s=mvn(MU,c,n);return{v1:s.map(r=>r[0]),v2:s.map(r=>r[1]),v3:s.map(r=>r[2]),v4:s.map(r=>r[3])}}
   function lineup(o){
-    const{numPanels:np=20,signalStrength:ss='medium',isNull:nl=false}=o;
+    const{numPanels:np=10,signalStrength:ss='medium',isNull:nl=false}=o;
     const n=nP(),p=[];
-    if(nl){
-      // Null trials: all panels from same process (identity matrix)
-      for(let i=0;i<np;i++)p.push(dd(nC,n));
-      return{panels:p,targetIndex:-1,nPoints:n,covPattern:-1,distractorType:'none'}
-    }
+    if(nl){for(let i=0;i<np;i++)p.push(dd(nC,n));return{panels:p,targetIndex:-1,nPoints:n,covPattern:-1,distractorType:'none'}}
     const r=SIG[ss]||SIG.medium,ti=Math.floor(Math.random()*np);
     const pat=randPattern();
-    // Per Prof. Reda: distractor complexity varies with signal strength
-    // Strong: distractors = independent (identity matrix) — easy, big contrast
-    // Medium: distractors = ONE correlation (same pair as target, positive only, no negative pair)
-    //         so target has +r and -r, distractors have only +r on same pair
-    // Weak: distractors = TWO correlations but DIFFERENT pairs from target
-    //        both look structured, but the structure differs
     let dType='identity';
     for(let i=0;i<np;i++){
       if(i===ti){p.push(dd(tCov(r,pat),n));continue}
@@ -273,11 +255,9 @@ const DG=(()=>{
         p.push(dd(nC,n));
         dType='identity';
       }else if(ss==='medium'){
-        // Distractors get half the target's structure: same positive pair, no negative pair
         p.push(dd(halfCov(r*0.6,pat),n));
         dType='half';
       }else{
-        // Weak: distractors get full correlations but on DIFFERENT variable pairs
         const dp=diffPattern(pat);
         p.push(dd(tCov(r*0.7,dp),n));
         dType='different';
@@ -303,18 +283,14 @@ function renderMini(el,data,type,varLabel){
     .attr('preserveAspectRatio','xMidYMid meet')
     .style('overflow','hidden');
   const g=svg.append('g').attr('transform',`translate(${pad},${pad})`);
-  // Per-chart scale: use data min/max with 10% padding so chart fills the space
-  // Professor Reda: "the minimum should be the minimum of the display, the maximum should be the maximum of the display"
   const dMin=d3.min(data),dMax=d3.max(data);
   const dPad=(dMax-dMin)*0.1||0.5;
   const yScale=d3.scaleLinear().domain([dMin-dPad,dMax+dPad]).range([ih,0]);
 
-  // baseline
   g.append('line').attr('x1',0).attr('y1',ih).attr('x2',iw).attr('y2',ih).attr('stroke','#dde0e4').attr('stroke-width',.7);
 
   if(type==='bar'){
     const x=d3.scaleBand().domain(d3.range(data.length)).range([0,iw]).padding(.18);
-    // For bars, anchor at the data minimum (bottom of scale) so bars fill the space
     const yBottom=yScale.domain()[0];
     g.selectAll('rect').data(data).enter().append('rect')
       .attr('x',(d,i)=>x(i)).attr('y',d=>yScale(d))
@@ -343,7 +319,6 @@ function renderMini(el,data,type,varLabel){
       .attr('r',3).attr('fill',c).attr('opacity',.72);
   }
 
-  // var label inside SVG so it's always contained
   svg.append('text').attr('x',4).attr('y',11).attr('font-size','10px').attr('font-weight','700').attr('fill','#999').text(varLabel);
 }
 
@@ -402,14 +377,13 @@ function gPID(){let p=localStorage.getItem('dl_pid3');if(p)return p;p='P'+Date.n
 // =====================================================================
 async function sendS(rows){
   if(!SHEET_URL||SHEET_URL.includes("PASTE"))return{ok:false,r:"not_configured"};
-  // Try up to 3 times
   for(let attempt=0;attempt<3;attempt++){
     try{
       await fetch(SHEET_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"application/json"},body:JSON.stringify({data:rows})});
       return{ok:true}
     }catch(e){
       if(attempt===2)return{ok:false,r:e.message}
-      await new Promise(r=>setTimeout(r,1000)); // wait 1s before retry
+      await new Promise(r=>setTimeout(r,1000));
     }
   }
   return{ok:false,r:"failed after retries"}
@@ -418,12 +392,14 @@ async function sendS(rows){
 // =====================================================================
 // EXPERIMENT — Streamlined: ~10 min, no follow-up question
 // =====================================================================
-// Warmup: 2 panels, 1 trial, feedback
-// Warmup: 4 panels, 1 trial, feedback
+// Warmup: 2 panels, 1 trial, feedback with reason
+// Warmup: 4 panels, 1 trial, feedback with reason
 // Scored: 4 panels, 20 trials (10 target + 10 null = 50-50)
 // Break
 // Scored: 10 panels, 20 trials (10 target + 10 null = 50-50)
-// Total: 42 trials, 40 scored. ~10 minutes.
+// Total: 42 trials, 40 scored.
+// Chance levels: 4-panel = 1/4 target detection, 10-panel = 1/10 target detection.
+// Null trials test correct rejection using the "All dashboards look the same" option.
 // =====================================================================
 
 (function(){
@@ -446,9 +422,7 @@ function build(order){
 
   // SCORED: 4 panels, 20 trials (10 target + 10 null = 50-50)
   const s4=[];
-  order.forEach(c=>SIGS.forEach(s=>{
-    s4.push({np:4,ct:c,ss:s,nl:false,mx:false,ph:'s4',fb:false});
-  }));
+  order.forEach(c=>SIGS.forEach(s=>{s4.push({np:4,ct:c,ss:s,nl:false,mx:false,ph:'s4',fb:false})}));
   s4.push({np:4,ct:MIXED,ss:'strong',nl:false,mx:true,ph:'s4',fb:false});
   for(let i=0;i<10;i++){
     s4.push({np:4,ct:i<3?order[i%3]:(i<6?order[i%3]:(i<9?MIXED:order[0])),ss:null,nl:true,mx:i>=6&&i<9,ph:'s4',fb:false});
@@ -457,9 +431,7 @@ function build(order){
 
   // SCORED: 10 panels, 20 trials (10 target + 10 null = 50-50)
   const s10=[];
-  order.forEach(c=>SIGS.forEach(s=>{
-    s10.push({np:10,ct:c,ss:s,nl:false,mx:false,ph:'s10',fb:false});
-  }));
+  order.forEach(c=>SIGS.forEach(s=>{s10.push({np:10,ct:c,ss:s,nl:false,mx:false,ph:'s10',fb:false})}));
   s10.push({np:10,ct:MIXED,ss:'strong',nl:false,mx:true,ph:'s10',fb:false});
   for(let i=0;i<10;i++){
     s10.push({np:10,ct:i<3?order[i%3]:(i<6?order[i%3]:(i<9?MIXED:order[0])),ss:null,nl:true,mx:i>=6&&i<9,ph:'s10',fb:false});
@@ -468,7 +440,7 @@ function build(order){
   return t;
 }
 
-document.addEventListener('DOMContentLoaded',()=>{
+function appInit(){
   document.getElementById('participant-id').value=gPID();
 
   const con=document.getElementById('consent-check'),bs=document.getElementById('btn-start');
@@ -494,7 +466,9 @@ document.addEventListener('DOMContentLoaded',()=>{
   document.getElementById('btn-ph').addEventListener('click',()=>run());
   document.getElementById('btn-resume').addEventListener('click',()=>{brk=true;run()});
   document.getElementById('btn-dl').addEventListener('click',dlCSV);
-});
+}
+
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',appInit);else appInit();
 
 function run(){
   if(idx>=trials.length){end();return}
@@ -502,12 +476,12 @@ function run(){
 
   if(t.ph!==lastPh){
     lastPh=t.ph;
-    if(t.ph==='w4'){phScr('Warmup: 4 panels','Same task, one more panel. Still with feedback.');return}
+    if(t.ph==='w4'){phScr('Warmup: 4 panels','Same task, one more panel. Still with feedback and explanation.');return}
     if(t.ph==='s4'){phScr('Scored: 4 panels','No more feedback. Your responses are now recorded.');return}
-    if(t.ph==='s10'){phScr('Scored: 10 panels','More panels now. A break will come halfway through.');return}
+    if(t.ph==='s10'){phScr('Scored: 10 panels','More panels now. A short break will come halfway through this block.');return}
   }
 
-  // Break halfway through 10-panel phase
+  // Break halfway through 10-panel phase.
   const s10trials=trials.filter(x=>x.ph==='s10');
   const s10done=trials.slice(0,idx).filter(x=>x.ph==='s10').length;
   if(t.ph==='s10'&&!brk&&s10done>=Math.floor(s10trials.length/2)){
@@ -516,7 +490,6 @@ function run(){
   }
 
   show('screen-trial');
-  // Hide confirm button from previous trial
   const prevCb=document.getElementById('btn-confirm-sel');if(prevCb)prevCb.style.display='none';
   const totalScored=trials.filter(x=>!x.fb).length;
   const scoredSoFar=trials.slice(0,idx).filter(x=>!x.fb).length;
@@ -529,7 +502,6 @@ function run(){
   t._ti=lu.targetIndex;t._np=lu.nPoints;t._panels=lu.panels;t._covPat=lu.covPattern;t._dType=lu.distractorType;
 
   renderLineup(document.getElementById('trial-lineup'),lu.panels,t.ct,t.np,i=>{
-    // Show confirm button instead of immediate submit
     let cb=document.getElementById('btn-confirm-sel');
     if(!cb){
       cb=document.createElement('button');
