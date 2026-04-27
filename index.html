@@ -238,9 +238,9 @@ const DG=(()=>{
   function randPattern(){return Math.floor(Math.random()*3)}
   function diffPattern(targetPat){const opts=[0,1,2].filter(p=>p!==targetPat);return opts[Math.floor(Math.random()*opts.length)]}
   const nC=[[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]];
-  const SIG={weak:.50,medium:.70,strong:.90};
+  const SIG={weak:.75,medium:.85,strong:.95};
   const MU=[5,5,5,5];
-  function nP(){return 12+Math.floor(Math.random()*7)}
+  function nP(){return 20+Math.floor(Math.random()*6)}
   function dd(c,n){const s=mvn(MU,c,n);return{v1:s.map(r=>r[0]),v2:s.map(r=>r[1]),v3:s.map(r=>r[2]),v4:s.map(r=>r[3])}}
   function lineup(o){
     const{numPanels:np=10,signalStrength:ss='medium',isNull:nl=false}=o;
@@ -398,6 +398,7 @@ async function sendS(rows){
 // Break
 // Scored: 10 panels, 20 trials (10 target + 10 null = 50-50)
 // Total: 42 trials, 40 scored.
+// Easier version: stronger correlations, 20–25 points per variable, and no weak scored condition.
 // Chance levels: 4-panel = 1/4 target detection, 10-panel = 1/10 target detection.
 // Null trials test correct rejection using the "All dashboards look the same" option.
 // =====================================================================
