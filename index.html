@@ -240,7 +240,7 @@ const DG=(()=>{
   const nC=[[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]];
   const SIG={weak:.75,medium:.85,strong:.95};
   const MU=[5,5,5,5];
-  function nP(){return 20+Math.floor(Math.random()*6)}
+  function nP(){return 12}
   function dd(c,n){const s=mvn(MU,c,n);return{v1:s.map(r=>r[0]),v2:s.map(r=>r[1]),v3:s.map(r=>r[2]),v4:s.map(r=>r[3])}}
   function lineup(o){
     const{numPanels:np=10,signalStrength:ss='medium',isNull:nl=false}=o;
