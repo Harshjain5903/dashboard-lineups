@@ -113,7 +113,7 @@ p{margin-bottom:.75rem}
 <h2>About This Study</h2>
 <p>You will see dashboard panels, each containing a 2×2 grid of 4 charts (V1, V2, V3, V4). Your task is to find the panel where the charts are related to each other.</p>
 <h3>Time</h3>
-<p>About 17 minutes. Starts with warmup rounds (with feedback), then scored rounds.</p>
+<p>About 10 minutes. Starts with warmup rounds (with feedback), then scored rounds.</p>
 <h3>Eligibility</h3>
 <p>Normal or corrected-to-normal vision. Desktop or laptop with screen ≥13 inches.</p>
 <h3>Consent</h3>
@@ -149,11 +149,8 @@ p{margin-bottom:.75rem}
 <p>If no panel stands out, click <strong>"All dashboards look the same."</strong></p>
 </div>
 <h3>Warmup First</h3>
-<p>You'll start with <strong>4 panels</strong>, then <strong>10 panels</strong> — both with feedback telling you if you're right or wrong. Then the real trials begin (10 panels and 20 panels, no feedback).</p>
-<h3>After Each Trial</h3>
-<p>You'll answer one quick question about what guided your choice.</p>
-</div>
-<button id="btn-go" class="btn-primary">Start Warmup (4 panels)</button>
+<p>You'll start with <strong>2 panels</strong>, then <strong>4 panels</strong> — both with feedback telling you if you're right or wrong. Then the real trials begin (4 panels and 10 panels, no feedback).</p>
+<button id="btn-go" class="btn-primary">Start Warmup (2 panels)</button>
 </div></div>
 
 <!-- TRIAL -->
@@ -178,18 +175,6 @@ p{margin-bottom:.75rem}
 <div id="fb-lineup" class="lineup-grid feedback-lineup"></div>
 </div>
 <button id="btn-fb" class="btn-primary">Continue</button>
-</div></div>
-
-<!-- FOLLOW-UP -->
-<div id="screen-followup" class="screen">
-<div class="container">
-<h1>What guided your decision?</h1>
-<div class="followup-options">
-<button class="btn-followup" data-value="cross-chart">The relationship <em>between</em> the charts stood out</button>
-<button class="btn-followup" data-value="single-chart">One specific chart stood out on its own</button>
-<button class="btn-followup" data-value="overall-gist">The overall "feel" of the panel was different</button>
-<button class="btn-followup" data-value="guessed">I guessed</button>
-</div>
 </div></div>
 
 <!-- PHASE TRANSITION -->
@@ -413,22 +398,32 @@ function renderLineup(gridEl,panels,chartType,np,onSelect){
 function gPID(){let p=localStorage.getItem('dl_pid3');if(p)return p;p='P'+Date.now().toString(36)+Math.random().toString(36).substr(2,4);localStorage.setItem('dl_pid3',p);return p}
 
 // =====================================================================
-// GOOGLE SHEETS
+// GOOGLE SHEETS — with retry
 // =====================================================================
-async function sendS(rows){if(!SHEET_URL||SHEET_URL.includes("PASTE"))return{ok:false,r:"not_configured"};try{await fetch(SHEET_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"application/json"},body:JSON.stringify({data:rows})});return{ok:true}}catch(e){return{ok:false,r:e.message}}}
+async function sendS(rows){
+  if(!SHEET_URL||SHEET_URL.includes("PASTE"))return{ok:false,r:"not_configured"};
+  // Try up to 3 times
+  for(let attempt=0;attempt<3;attempt++){
+    try{
+      await fetch(SHEET_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"application/json"},body:JSON.stringify({data:rows})});
+      return{ok:true}
+    }catch(e){
+      if(attempt===2)return{ok:false,r:e.message}
+      await new Promise(r=>setTimeout(r,1000)); // wait 1s before retry
+    }
+  }
+  return{ok:false,r:"failed after retries"}
+}
 
 // =====================================================================
-// EXPERIMENT — Updated per Prof. Reda feedback
+// EXPERIMENT — Streamlined: ~10 min, no follow-up question
 // =====================================================================
-// Warmup: 4 panels, 3 trials, feedback, not analyzed
-// Warmup: 10 panels, 2 trials, feedback, not analyzed
-// Scored: 10 panels, 20 trials (10 target + 10 null ≈ 50-50), no feedback
+// Warmup: 2 panels, 1 trial, feedback
+// Warmup: 4 panels, 1 trial, feedback
+// Scored: 4 panels, 20 trials (10 target + 10 null = 50-50)
 // Break
-// Scored: 20 panels, 20 trials (10 target + 10 null ≈ 50-50), no feedback
-// Total: 45 trials, 40 scored
-// ~30 locally recruited participants. Latin square. ~17 minutes
-// Covariance pairing varies randomly (V1↔V2, V1↔V3, or V1↔V4)
-// Per-chart y-axis scales to data range (not fixed 0-10)
+// Scored: 10 panels, 20 trials (10 target + 10 null = 50-50)
+// Total: 42 trials, 40 scored. ~10 minutes.
 // =====================================================================
 
 (function(){
@@ -437,53 +432,39 @@ const SIGS=['weak','medium','strong'];
 const LAT=[['bar','line','dot'],['line','dot','bar'],['dot','bar','line']];
 const MIXED=['bar','line','dot','scatter'];
 
-let pD={},trials=[],idx=0,tS=0,tmr=null,res=[],cur=null,brk=false,lastPh='';
+let pD={},trials=[],idx=0,tS=0,tmr=null,res=[],brk=false,lastPh='';
 
 function show(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));document.getElementById(id).classList.add('active');window.scrollTo(0,0)}
 function shuf(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
 
 function build(order){
   const t=[];
-
-  // WARMUP: 4 panels, 3 trials (PPT row 1)
-  t.push({np:4,ct:order[0],ss:'strong',nl:false,mx:false,ph:'w4',fb:true});
+  // WARMUP: 2 panels, 1 trial
+  t.push({np:2,ct:order[0],ss:'strong',nl:false,mx:false,ph:'w2',fb:true});
+  // WARMUP: 4 panels, 1 trial
   t.push({np:4,ct:order[1],ss:'strong',nl:false,mx:false,ph:'w4',fb:true});
-  t.push({np:4,ct:MIXED,ss:'strong',nl:false,mx:true,ph:'w4',fb:true});
 
-  // WARMUP: 10 panels, 2 trials (PPT row 2)
-  t.push({np:10,ct:order[2],ss:'strong',nl:false,mx:false,ph:'w10',fb:true});
-  t.push({np:10,ct:order[0],ss:'medium',nl:false,mx:false,ph:'w10',fb:true});
+  // SCORED: 4 panels, 20 trials (10 target + 10 null = 50-50)
+  const s4=[];
+  order.forEach(c=>SIGS.forEach(s=>{
+    s4.push({np:4,ct:c,ss:s,nl:false,mx:false,ph:'s4',fb:false});
+  }));
+  s4.push({np:4,ct:MIXED,ss:'strong',nl:false,mx:true,ph:'s4',fb:false});
+  for(let i=0;i<10;i++){
+    s4.push({np:4,ct:i<3?order[i%3]:(i<6?order[i%3]:(i<9?MIXED:order[0])),ss:null,nl:true,mx:i>=6&&i<9,ph:'s4',fb:false});
+  }
+  t.push(...shuf(s4));
 
-  // SCORED: 10 panels, 20 trials (PPT row 3)
-  // Prof. Reda: make null and target-present roughly 50-50
-  // 3 chart types × 3 signals = 9 target + 1 mixed-strong = 10 target-present
-  // 10 null trials = 50-50
+  // SCORED: 10 panels, 20 trials (10 target + 10 null = 50-50)
   const s10=[];
   order.forEach(c=>SIGS.forEach(s=>{
     s10.push({np:10,ct:c,ss:s,nl:false,mx:false,ph:'s10',fb:false});
   }));
   s10.push({np:10,ct:MIXED,ss:'strong',nl:false,mx:true,ph:'s10',fb:false});
-  // 10 null trials for 50-50
   for(let i=0;i<10;i++){
     s10.push({np:10,ct:i<3?order[i%3]:(i<6?order[i%3]:(i<9?MIXED:order[0])),ss:null,nl:true,mx:i>=6&&i<9,ph:'s10',fb:false});
   }
   t.push(...shuf(s10));
-
-  // SCORED: 20 panels, 20 trials (PPT row 5)
-  // Prof. Reda: ~50-50 null vs target-present
-  // 3 chart types × 3 signals = 9 target + 1 mixed = 10 target-present
-  // 10 null trials = 50-50
-  const s20=[];
-  order.forEach(c=>SIGS.forEach(s=>{
-    s20.push({np:20,ct:c,ss:s,nl:false,mx:false,ph:'s20',fb:false});
-  }));
-  s20.push({np:20,ct:MIXED,ss:'strong',nl:false,mx:true,ph:'s20',fb:false});
-  // 10 null trials for 50-50
-  for(let i=0;i<10;i++){
-    s20.push({np:20,ct:i<3?order[i%3]:(i<6?order[i%3]:(i<9?MIXED:order[0])),ss:null,nl:true,mx:i>=6&&i<9,ph:'s20',fb:false});
-  }
-  t.push(...shuf(s20));
-
   return t;
 }
 
@@ -509,7 +490,6 @@ document.addEventListener('DOMContentLoaded',()=>{
 
   document.getElementById('btn-go').addEventListener('click',()=>{idx=0;brk=false;lastPh='';run()});
   document.getElementById('btn-all-same').addEventListener('click',()=>{const cb=document.getElementById('btn-confirm-sel');if(cb)cb.style.display='none';done(-1)});
-  document.querySelectorAll('.btn-followup').forEach(b=>b.addEventListener('click',()=>{cur.followup=b.dataset.value;res.push(cur);idx++;run()}));
   document.getElementById('btn-fb').addEventListener('click',()=>{idx++;run()});
   document.getElementById('btn-ph').addEventListener('click',()=>run());
   document.getElementById('btn-resume').addEventListener('click',()=>{brk=true;run()});
@@ -520,19 +500,18 @@ function run(){
   if(idx>=trials.length){end();return}
   const t=trials[idx];
 
-  // Phase transitions
   if(t.ph!==lastPh){
     lastPh=t.ph;
-    if(t.ph==='w10'){phScr('Warmup: 10 panels','Same task, more panels. Still with feedback.');return}
-    if(t.ph==='s10'){phScr('Scored: 10 panels','No more feedback from here. Your responses are recorded. Take your time.');return}
-    if(t.ph==='s20'){phScr('Scored: 20 panels','Full 4×5 grid. A break will come halfway through.');return}
+    if(t.ph==='w4'){phScr('Warmup: 4 panels','Same task, one more panel. Still with feedback.');return}
+    if(t.ph==='s4'){phScr('Scored: 4 panels','No more feedback. Your responses are now recorded.');return}
+    if(t.ph==='s10'){phScr('Scored: 10 panels','More panels now. A break will come halfway through.');return}
   }
 
-  // Break halfway through 20-panel phase
-  const s20trials=trials.filter(x=>x.ph==='s20');
-  const s20done=trials.slice(0,idx).filter(x=>x.ph==='s20').length;
-  if(t.ph==='s20'&&!brk&&s20done>=Math.floor(s20trials.length/2)){
-    document.getElementById('break-progress').textContent=`Completed ${s20done} of ${s20trials.length} trials in this phase.`;
+  // Break halfway through 10-panel phase
+  const s10trials=trials.filter(x=>x.ph==='s10');
+  const s10done=trials.slice(0,idx).filter(x=>x.ph==='s10').length;
+  if(t.ph==='s10'&&!brk&&s10done>=Math.floor(s10trials.length/2)){
+    document.getElementById('break-progress').textContent=`Completed ${s10done} of ${s10trials.length} trials in this phase.`;
     show('screen-break');return;
   }
 
@@ -615,7 +594,7 @@ function done(sel){
     show('screen-feedback');return;
   }
 
-  cur={
+  const record={
     trialNumber:idx+1,phase:t.ph,numPanels:t.np,
     chartType:Array.isArray(t.ct)?'mixed':t.ct,
     signalStrength:t.ss||'null',
@@ -625,10 +604,11 @@ function done(sel){
     targetPanel:t._ti+1,selectedPanel:sel+1,
     correct:correct,
     responseTimeMs:Math.round(rt),
-    nPoints:t._np,
-    followup:null
+    nPoints:t._np
   };
-  show('screen-followup');
+  res.push(record);
+  idx++;
+  run();
 }
 
 async function end(){
@@ -654,7 +634,7 @@ async function end(){
 }
 
 function dlCSV(){
-  const h=['participantId','age','gender','vizExperience','vision','chartOrder','screenWidth','screenHeight','sessionTimestamp','trialNumber','phase','numPanels','chartType','signalStrength','isNull','isMixed','covPattern','distractorType','targetPanel','selectedPanel','correct','responseTimeMs','nPoints','followup'];
+  const h=['participantId','age','gender','vizExperience','vision','chartOrder','screenWidth','screenHeight','sessionTimestamp','trialNumber','phase','numPanels','chartType','signalStrength','isNull','isMixed','covPattern','distractorType','targetPanel','selectedPanel','correct','responseTimeMs','nPoints'];
   const rows=res.map(r=>h.map(k=>{const v=['participantId','age','gender','vizExperience','vision','chartOrder','screenWidth','screenHeight','sessionTimestamp'].includes(k)?pD[k==='vizExperience'?'viz':k==='chartOrder'?'co':k==='screenWidth'?'sw':k==='screenHeight'?'sh':k==='sessionTimestamp'?'ts':k]:r[k];return`"${String(v==null?'':v).replace(/"/g,'""')}"`}).join(','));
   const csv=h.join(',')+'\n'+rows.join('\n');
   const b=new Blob([csv],{type:'text/csv'});
